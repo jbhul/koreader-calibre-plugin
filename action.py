@@ -32,6 +32,7 @@ from PyQt5.Qt import (
     QApplication,
     QSize,
     QSizePolicy,
+    Qt
 )
 from PyQt5.QtGui import QPixmap
 
@@ -365,32 +366,175 @@ class KoreaderAction(InterfaceAction):
             'KoreaderAction:get_paths:'
         )
 
-        debug_print(
-            f'found {len(device.books())} paths to books:\n\t',
-            '\n\t'.join([book.path for book in device.books()])
-        )
+        # Check if custom sidecar path is specified
+        '''
+        Req a normal file or check where calibre helps you store things to try and finalize the path?
 
-        debug_print(
-            f'found {len(device.books())} lpaths to books:\n\t',
-            '\n\t'.join([book.lpath for book in device.books()])
-        )
+        Diff algo by device type since device.list(custom_path, recurse=True) is only for USB devices, not wireless/SMART_DEVICE_APP
 
-        for book in device.books():
-            debug_print(f'uuid to path: {book.uuid} - {book.path}')
+        if physical/usb
+        get dir via guess?
+        if md5 get all files in dir. Use stat to match meta to get md5
+        if docsettings get bookinfo and build path
 
-        paths = {
-            book.uuid: re.sub(
-                r'\.(\w+)$', r'.sdr/metadata.\1.lua', book.path
+        if wireless
+        Need base ko dir
+        if md5 get all files with stat, all remaining attempt to match meta by get stats 
+        if docsettings get bookinfo and build path
+
+        
+        For SDA maybe query DB for meta like path and/or MD5?
+        if wireless_bool:
+            True
+            # Handle limited driver
+            https://github.com/koreader/koreader/blob/master/plugins/calibre.koplugin/wireless.lua#L345
+        
+        '''
+        wireless_bool = device.connected_device.__class__.__name__ == SMART_DEVICE_APP
+        custom_path = CONFIG.get('sidecar_path', '').strip()
+        #CHANGE Sidecar_path to sidecar_location
+        if custom_path == 'docsettings':
+            True
+        elif custom_path == 'hashdocsettings':
+            True
+        else:
+            #default
+            try:
+                debug_print(f'Searching for sidecar files in custom path: {custom_path}')
+                if '\docsettings' in custom_path:
+                    # Use the docsettings folder for sidecar files
+                    base_path = custom_path#/applications/koreader/docsettings/mnt/ext1/'
+                    for book in device.books():
+                        print(book.uuid)
+                        print(book.path)
+                        print(base_path + re.sub(
+                            r'\.(\w+)$', r'.sdr/metadata.\1.lua', book.path
+                        ))
+                        print('')
+                    paths = {
+                        book.uuid: base_path + re.sub(
+                            r'\.(\w+)$', r'.sdr/metadata.\1.lua', book.path
+                        )
+                        for book in device.books()
+                    }
+                elif '\hashdocsettings' in custom_path:
+                    md5_column = CONFIG["column_md5"]
+                    if md5_column == '':
+                        error_dialog(
+                            self.gui,
+                            'Failure',
+                            'MD5 column not mapped, necessary for hashdocsettings matching',
+                            show=True,
+                            show_copy_button=False
+                        )
+                        return None
+                    db = self.gui.current_db.new_api
+                    uuid_field = db.fields['uuid']
+
+                    listing = device.list(custom_path, recurse=True)
+                    paths = {}
+
+                    for dirpath, file_list in listing:
+                        for file_obj in file_list:
+                            # Only add non-directory files ending with .lua
+                            if not file_obj.is_dir and file_obj.path.lower().endswith('.lua'):
+                                # For each book, try to match the sidecar file
+                                # Use the hashdocsettings folder for sidecar files
+                                md5_from_path = os.path.basename(os.path.dirname(file_obj.path)).split('.')[0]
+                                print(md5_from_path)
+                                if len(md5_from_path) == 32:
+                                    bookID = list(db.search(f'{md5_column}:"{md5_from_path}"'))
+                                    if len(bookID) == 0:
+                                        debug_print(f'Book not found for MD5: {md5_from_path}')
+                                        dialog = MD5MapDialog(self.gui, path_hint=file_obj.path, 
+                                                             md5_column=md5_column, 
+                                                             md5_from_path=md5_from_path)
+                                        dialog.exec_()
+                                        if dialog.get_selected_book_id() is not None:
+                                            # Refresh the book search since we've updated the MD5
+                                            bookID = list(db.search(f'{md5_column}:"{md5_from_path}"'))
+                                    '''
+                                    ["doc_path"] = " What I Need
+                                    ["doc_props"]
+                                    '''
+                                    if len(bookID) == 1:
+                                        bookUUID = uuid_field.for_book(bookID[0])
+                                        paths[bookUUID] = file_obj.path
+                                        debug_print(f'Matched sidecar file for book: {bookUUID} -> {file_obj.path}')
+                                    else:
+                                        # More than 1 book with MD5
+                                        print('error')
+                                    #old ref
+                                    '''for book in device.books():
+                                        if book.path.split('/')[-1].rsplit('.', 1)[0] in file_obj.path:
+                                            paths[book.uuid] = file_obj.path
+                                            debug_print(f'Matched sidecar file for book: {book.path} -> {file_obj.path}')'''
+                                else:
+                                    print('MD5 len error')
+                else:
+                    error_dialog(
+                        self.gui,
+                        'Failure',
+                        'No match type from path. Custom path must contain docsettings or hashdocsettings',
+                        show=True,
+                        show_copy_button=False
+                    )
+                    return None
+
+                if not paths:
+                    debug_print('No sidecar files found in custom path')
+                    error_dialog(
+                        self.gui,
+                        'No sidecar files found',
+                        f'No .lua sidecar files found in the specified path: {custom_path}',
+                        det_msg='Please verify the path is correct and contains KOReader sidecar files.',
+                        show=True,
+                        show_copy_button=False
+                    )
+                    return {}
+                    
+                return paths
+                
+            except Exception as e:
+                debug_print(f'Error accessing custom sidecar path: {str(e)}')
+                error_dialog(
+                    self.gui,
+                    'Sidecar Path Error',
+                    f'Could not access the specified sidecar path: {custom_path}',
+                    det_msg=f'Error: {str(e)}',
+                    show=True,
+                    show_copy_button=False
+                )
+                return {}
+        
+        else:
+            # Default behavior - use book folder for sidecar files
+            debug_print(
+                f'found {len(device.books())} paths to books:\n\t',
+                '\n\t'.join([book.path for book in device.books()])
             )
-            for book in device.books()
-        }
 
-        debug_print(
-            f'generated {len(paths)} path(s) to sidecar Lua files:\n\t',
-            '\n\t'.join(paths.values())
-        )
+            debug_print(
+                f'found {len(device.books())} lpaths to books:\n\t',
+                '\n\t'.join([book.lpath for book in device.books()])
+            )
 
-        return paths
+            for book in device.books():
+                debug_print(f'uuid to path: {book.uuid} - {book.path}')
+
+            paths = {
+                book.uuid: re.sub(
+                    r'\.(\w+)$', r'.sdr/metadata.\1.lua', book.path
+                )
+                for book in device.books()
+            }
+
+            debug_print(
+                f'generated {len(paths)} path(s) to sidecar Lua files:\n\t',
+                '\n\t'.join(paths.values())
+            )
+        
+            return paths
 
     def get_sidecar(self, device, path):
         """Requests the given path from the given device and returns the
@@ -659,7 +803,7 @@ class KoreaderAction(InterfaceAction):
                 show=True,
                 show_copy_button=False
             )
-            return False
+            return False if not DEBUG else True # Allow debug mode to override UNSUPPORTED_DEVICES
         elif device_class in SUPPORTED_DEVICES:
             return True
         else:
@@ -1359,3 +1503,115 @@ class Icon(QWidget):
             y = (self.height() - self.size) // 2
             p = QPainter(self)
             p.drawPixmap(x, y, self.size, self.size, self.pixmap)
+
+class MD5MapDialog(QDialog):
+    def __init__(self, parent, path_hint, md5_column, md5_from_path):
+        super().__init__(parent)
+        self.setWindowTitle("Map KOReader Book")
+        self.setMinimumWidth(800)
+        self.setMinimumHeight(600)
+        self.selected_book_id = None
+        self.md5_from_path = md5_from_path
+        self.md5_column = md5_column
+        
+        layout = QVBoxLayout(self)
+        
+        # Instructions at top
+        top_label = QLabel("Select the book to map the MD5 hash to:")
+        layout.addWidget(top_label)
+        
+        # Path hint
+        path_label = QLabel(path_hint)
+        path_label.setWordWrap(True)
+        layout.addWidget(path_label)
+
+        # Get all books from calibre database
+        db = parent.current_db.new_api
+        all_books = db.all_book_ids()
+        self.books = []
+        
+        # Get book details and sort by title
+        for book_id in all_books:
+            mi = db.get_metadata(book_id)
+            self.books.append({
+                'id': book_id,
+                'title': mi.title,
+                'authors': ' & '.join(mi.authors) if mi.authors else 'Unknown'
+            })
+        
+        self.books.sort(key=lambda x: x['title'].lower())
+
+        # Create table
+        self.table = QTableWidget(len(self.books), 2)
+        self.table.setHorizontalHeaderLabels(["Title", "Author"])
+        
+        # Populate table
+        for i, book in enumerate(self.books):
+            # Title column
+            title_item = QTableWidgetItem(book['title'])
+            title_item.setFlags(title_item.flags() & ~Qt.ItemIsEditable)
+            self.table.setItem(i, 0, title_item)
+            
+            # Author column
+            author_item = QTableWidgetItem(book['authors'])
+            author_item.setFlags(author_item.flags() & ~Qt.ItemIsEditable)
+            self.table.setItem(i, 1, author_item)
+
+        self.table.selectRow(0)
+        self.table.resizeColumnsToContents()
+        self.table.setColumnWidth(0, 400)
+        self.table.setColumnWidth(1, 300)
+        
+        # Double-click to map
+        self.table.cellDoubleClicked.connect(self.map_md5)
+        layout.addWidget(self.table)
+
+        # Bottom buttons
+        bottomButtonLayout = QHBoxLayout()
+        
+        skip_btn = QPushButton("Skip", self)
+        skip_btn.setFixedWidth(200)
+        skip_btn.setIcon(QIcon.ic('edit-redo.png'))
+        skip_btn.clicked.connect(self.skip)
+        bottomButtonLayout.addWidget(skip_btn)
+        
+        bottomButtonLayout.addStretch()  # Right align the Map button
+        
+        map_btn = QPushButton("Map", self)
+        map_btn.setFixedWidth(200)
+        map_btn.setIcon(QIcon.ic('ok.png'))
+        map_btn.clicked.connect(self.map_md5)
+        map_btn.setDefault(True)
+        bottomButtonLayout.addWidget(map_btn)
+        
+        layout.addLayout(bottomButtonLayout)
+
+    def keyPressEvent(self, event):
+        # Type a letter to jump to the row with a title starting with that letter
+        key = event.text().lower()
+        if key:
+            for i in range(self.table.rowCount()):
+                item = self.table.item(i, 0)
+                if item and item.text().lower().startswith(key):
+                    self.table.selectRow(i)
+                    break
+        super().keyPressEvent(event)
+
+    def map_md5(self, *args):
+        row = self.table.currentRow()
+        if 0 <= row < len(self.books):
+            book = self.books[row]
+            self.selected_book_id = book['id']
+            # Update the MD5 column for the selected book
+            db = self.parent().current_db.new_api
+            metadata = db.get_metadata(self.selected_book_id)
+            metadata.set(self.md5_column, self.md5_from_path)
+            db.set_metadata(self.selected_book_id, metadata)
+        self.accept()
+
+    def skip(self):
+        self.selected_book_id = None
+        self.accept()
+
+    def get_selected_book_id(self):
+        return self.selected_book_id

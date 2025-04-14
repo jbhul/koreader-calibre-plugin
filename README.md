@@ -77,16 +77,23 @@ that thread.
      HTML, with _Interpret this column as_ set to _HTML_.
   
    There are additional settings for:
-   - Sync only if changes are more recent: Checks retrieved **Last Sync Date** against date on file.
-   - No sync if book has already been finished: If **percent read** is _100_ or if **reading status** is _finished_ don't update data.
-   - Automatic Sync on device connection: Silently sync's from KOReader when device is connected
+   - Sync only if changes are more recent: Checks retrieved **Last Sync Date**
+     against date on file.
+   - No sync if book has already been finished: If **percent read** is _100_ or
+     if **reading status** is _finished_ don't update data.
+   - Automatic Sync on device connection: Silently sync's from KOReader when
+     device is connected
+   - If you use a sidecar location other than Book Folder like docsettings or
+     hashdocumentsettings you can specify a path to search for sidecars in
+     using the format D:/path_to_koreader/docsettings or hashdocsettings/,
+     otherwise leave blank.
 
-1.  Add _KOReader Sync_ to _main toolbar when a device is connected_, if it
+2.  Add _KOReader Sync_ to _main toolbar when a device is connected_, if it
     isn't there already.
-2.  Right-click the _KOReader Sync_ icon and _Configure_.
-3.  Map the metadata you want to sync to the newly created calibre columns.
-4.  Click _OK_ to save your mapping.
-5.  From now on just click the _KOReader Sync_ icon to sync all mapped metadata
+3.  Right-click the _KOReader Sync_ icon and _Configure_.
+4.  Map the metadata you want to sync to the newly created calibre columns.
+5.  Click _OK_ to save your mapping.
+6.  From now on just click the _KOReader Sync_ icon to sync all mapped metadata
     for all books on the connected device to calibre.
 
 **Note:** Some field are depreciated and removed from plugin since they are

@@ -312,6 +312,7 @@ CONFIG.defaults['progress_sync_username'] = ''
 CONFIG.defaults['progress_sync_password'] = ''
 CONFIG.defaults['scheduleSyncHour'] = 4
 CONFIG.defaults['scheduleSyncMinute'] = 0
+CONFIG.defaults['sidecar_path'] = ''
 
 if numeric_version >= (5, 5, 0):
     module_debug_print = partial(root_debug_print, ' koreader:config:', sep='')
@@ -366,6 +367,21 @@ class ConfigWidget(QWidget):  # https://doc.qt.io/qt-5/qwidget.html
         layout.addLayout(self.add_checkbox('checkbox_no_sync_if_finished'))
 
         layout.addLayout(self.add_checkbox('checkbox_enable_automatic_sync'))
+
+        # Add Sidecar Location Label and Input
+        sidecar_path_layout = QHBoxLayout()
+        sidecar_path_label = QLabel(
+            "If you have KOReader save sidecars in the docsettings or hashdocumentsettings folders "
+            "add the path of the folder here in the format D:/path_to_koreader/docsettings or hashdocsettings/", 
+            self
+        )
+        sidecar_path_label.setWordWrap(True)
+        layout.addWidget(sidecar_path_label)
+        self.sidecar_path_input = QLineEdit(self)
+        self.sidecar_path_input.setText(CONFIG['sidecar_path'])
+        self.sidecar_path_input.setPlaceholderText('D:/path_to_koreader/docsettings or hashdocsettings/')
+        sidecar_path_layout.addWidget(self.sidecar_path_input)
+        layout.addLayout(sidecar_path_layout)
 
         # Progress Sync Section
         layout.addWidget(self.create_separator())
@@ -448,6 +464,8 @@ class ConfigWidget(QWidget):  # https://doc.qt.io/qt-5/qwidget.html
         # Save Checkbox Settings
         for config_name in CHECKBOXES:
             CONFIG[config_name] = CHECKBOXES[config_name]['checkbox'].checkState() == Qt.Checked
+
+        CONFIG['sidecar_path'] = self.sidecar_path_input.text().strip()
         
         # Save Scheduled ProgressSync Settings
         CONFIG['scheduleSyncHour'] = self.schedule_hour_input.value()
